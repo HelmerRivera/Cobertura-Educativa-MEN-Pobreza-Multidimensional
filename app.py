@@ -1,5 +1,5 @@
 # =============================================================================
-# TerritorioPulse – Streamlit App (versión definitiva)
+# TerritorioPulse – Streamlit App (versión definitiva + LISA corregido)
 # Observatorio Espacial de Desarrollo Humano – Colombia
 # Cobertura Educativa (MEN) × IPM (DANE) | Datos REALES 2018-2023
 # =============================================================================
@@ -73,7 +73,6 @@ def load_data():
                           "cobertura_educativa": cob_2023[i], "ipm": ipm_2023[i]})
 
     df = pd.DataFrame(data_list)
-    # Merge limpio: solo traemos departamento desde gdf
     df = df.merge(gdf[["cod_dpto", "departamento"]], on="cod_dpto", how="left")
     return gdf, df
 
@@ -183,24 +182,21 @@ with tab1:
     except Exception as e:
         st.error(f"Error en el mapa: {e}")
 
-# ===================== TAB 2: Topografía 3D (CORREGIDA) =====================
+# ===================== TAB 2: Topografía 3D =====================
 with tab2:
     st.subheader("Proyección 3D sobre centroides departamentales")
     year_3d = st.selectbox("Año", [2018, 2023], index=1, key="y3d")
 
     try:
-        # Merge controlado: evitamos columnas duplicadas
         df_year = df[df["year"] == year_3d][["cod_dpto", "departamento", "cobertura_educativa", "ipm"]].copy()
         coords = gdf[["cod_dpto", "lon", "lat"]].copy()
         df_y = df_year.merge(coords, on="cod_dpto", how="left")
 
-        # Limpieza
         df_y["cobertura_educativa"] = pd.to_numeric(df_y["cobertura_educativa"], errors="coerce")
         df_y["ipm"] = pd.to_numeric(df_y["ipm"], errors="coerce")
         df_y = df_y.dropna(subset=["cobertura_educativa", "ipm", "lon", "lat", "departamento"])
         df_y = df_y.reset_index(drop=True)
 
-        # Tamaño siempre positivo
         min_v = float(df_y["cobertura_educativa"].min())
         df_y["size_pos"] = (df_y["cobertura_educativa"] - min_v) + 1.5
 
@@ -245,7 +241,7 @@ with tab2:
     except Exception as e:
         st.error(f"Error en la vista 3D: {e}")
 
-# ===================== TAB 3: Clusters LISA =====================
+# ===================== TAB 3: Clusters LISA (CORREGIDO) =====================
 with tab3:
     st.subheader("Clusters espaciales (High-High / Low-Low / Outliers)")
     c1, c2 = st.columns(2)
@@ -257,7 +253,9 @@ with tab3:
 
     try:
         df_y = df[df["year"] == year_l].set_index("cod_dpto").reindex(gdf["cod_dpto"])
-        y = pd.to_numeric(df_y[var_l], errors="coerce").fillna(method="ffill").fillna(method="bfill").values
+        
+        # Corrección: usar .ffill() y .bfill() (pandas moderno)
+        y = pd.to_numeric(df_y[var_l], errors="coerce").ffill().bfill().values
 
         w = KNN.from_dataframe(gdf, k=4, ids=gdf["cod_dpto"].tolist())
         w.transform = "r"
