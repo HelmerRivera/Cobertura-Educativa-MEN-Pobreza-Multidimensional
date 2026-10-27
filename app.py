@@ -1,18 +1,9 @@
 # =============================================================================
-# TerritorioPulse – Streamlit (versión completa y funcional)
+# TerritorioPulse – Streamlit App
 # Observatorio Espacial de Desarrollo Humano – Colombia
 # Cobertura Educativa (MEN) × IPM (DANE) | Datos REALES 2018-2023
-# Ejecutable 100% desde Google Colab
 # =============================================================================
 
-!pip install -q streamlit pyngrok libpysal esda geopandas splot plotly \
-               statsmodels scikit-learn seaborn mapclassify --quiet
-
-import os
-from pyngrok import ngrok
-
-# ---------- Escribir la aplicación Streamlit ----------
-app_code = r'''
 import streamlit as st
 import numpy as np
 import pandas as pd
@@ -21,8 +12,8 @@ import json
 import plotly.express as px
 import plotly.graph_objects as go
 import matplotlib.pyplot as plt
-from libpysal.weights import KNN, Queen
-from esda.moran import Moran, Moran_Local
+from libpysal.weights import KNN
+from esda.moran import Moran_Local
 from splot.esda import lisa_cluster
 import statsmodels.api as sm
 
@@ -60,12 +51,14 @@ def load_data():
     codigos = ["05","08","11","13","15","17","18","19","20","23","25","27",
                "41","44","47","50","52","54","63","66","68","70","73","76",
                "81","85","86","88","91","94","95","97","99"]
+
     ipm_2018 = [14.8,15.2,4.5,26.1,12.3,11.8,28.4,28.9,25.7,30.2,8.9,42.1,
                 15.6,51.4,32.8,16.2,22.1,22.8,9.7,10.4,10.1,29.5,14.9,9.8,
                 24.3,15.8,26.7,8.2,35.1,48.2,31.6,52.3,55.1]
     ipm_2023 = [11.2,12.1,3.8,21.4,9.8,9.1,23.7,24.2,21.3,25.6,7.2,37.8,
                 12.4,47.9,28.1,13.5,18.6,18.9,7.9,8.3,8.0,25.1,12.1,7.9,
                 20.1,12.9,22.4,6.8,30.2,44.1,27.8,48.6,51.3]
+
     cob_2018 = [82.1,85.4,92.3,78.6,88.2,89.1,71.4,76.8,79.3,74.2,90.5,65.3,
                 84.7,68.9,73.1,81.6,79.8,80.4,91.2,90.8,89.7,75.6,83.9,88.4,
                 76.2,82.3,74.8,94.1,69.5,61.2,70.8,58.4,62.7]
@@ -75,9 +68,12 @@ def load_data():
 
     data_list = []
     for i, cod in enumerate(codigos):
-        data_list.append({"cod_dpto": cod, "year": 2018, "cobertura_educativa": cob_2018[i], "ipm": ipm_2018[i]})
-        data_list.append({"cod_dpto": cod, "year": 2023, "cobertura_educativa": cob_2023[i], "ipm": ipm_2023[i]})
-    df = pd.DataFrame(data_list).merge(gdf[["cod_dpto","departamento"]], on="cod_dpto")
+        data_list.append({"cod_dpto": cod, "year": 2018,
+                          "cobertura_educativa": cob_2018[i], "ipm": ipm_2018[i]})
+        data_list.append({"cod_dpto": cod, "year": 2023,
+                          "cobertura_educativa": cob_2023[i], "ipm": ipm_2023[i]})
+
+    df = pd.DataFrame(data_list).merge(gdf[["cod_dpto", "departamento"]], on="cod_dpto")
     return gdf, df
 
 @st.cache_data
@@ -100,13 +96,22 @@ def estimar_spvar(_gdf, _df):
         ("IPM",                 P, C, WP, WC)
     ]:
         y_t = y_mat.iloc[:, 1].values
-        X_t = np.column_stack([np.ones(n), y_mat.iloc[:,0].values, cross_mat.iloc[:,0].values,
-                               wy_mat.iloc[:,0].values, wcross_mat.iloc[:,0].values])
+        X_t = np.column_stack([
+            np.ones(n),
+            y_mat.iloc[:, 0].values,
+            cross_mat.iloc[:, 0].values,
+            wy_mat.iloc[:, 0].values,
+            wcross_mat.iloc[:, 0].values
+        ])
         modelo = sm.OLS(y_t, X_t).fit(cov_type="HC1")
-        coefs = dict(zip(["const","auto","cruce_local","espacial_directa","espacial_cruzada"], modelo.params))
+        coefs = dict(zip(
+            ["const", "auto", "cruce_local", "espacial_directa", "espacial_cruzada"],
+            modelo.params
+        ))
         resultados[eq_name] = {"coefs": coefs, "rsquared": modelo.rsquared}
     return resultados
 
+# Cargar datos
 gdf, df = load_data()
 resultados_spvar = estimar_spvar(gdf, df)
 
@@ -129,7 +134,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "📋 Informe Ejecutivo"
 ])
 
-# ===== TAB 1 =====
+# ===================== TAB 1: Mapas Visión Nocturna =====================
 with tab1:
     st.subheader("Mapas coropléticos de alto contraste (HUD táctico)")
     c1, c2 = st.columns(2)
@@ -152,48 +157,66 @@ with tab1:
         titulo = f"POBREZA MULTIDIMENSIONAL (IPM) – VISIÓN NOCTURNA · {year_m}"
 
     fig = px.choropleth(
-        gdf_y, geojson=json.loads(gdf_y.to_json()), locations=gdf_y.index,
-        color=var_m, hover_name="departamento", hover_data={var_m:":.1f"},
-        color_continuous_scale=color_scale, title=titulo, projection="mercator"
+        gdf_y,
+        geojson=json.loads(gdf_y.to_json()),
+        locations=gdf_y.index,
+        color=var_m,
+        hover_name="departamento",
+        hover_data={var_m: ":.1f"},
+        color_continuous_scale=color_scale,
+        title=titulo,
+        projection="mercator"
     )
     fig.update_geos(fitbounds="locations", visible=False, bgcolor="#05070f")
-    fig.update_layout(margin=dict(r=0,t=50,l=0,b=0), height=600,
-                      template="plotly_dark", paper_bgcolor="#05070f",
-                      font=dict(color="#e2e8f0"), title_font=dict(color="#4ade80"))
+    fig.update_layout(
+        margin=dict(r=0, t=50, l=0, b=0),
+        height=600,
+        template="plotly_dark",
+        paper_bgcolor="#05070f",
+        font=dict(color="#e2e8f0"),
+        title_font=dict(color="#4ade80")
+    )
     st.plotly_chart(fig, use_container_width=True)
 
-# ===== TAB 2 =====
+# ===================== TAB 2: Topografía 3D =====================
 with tab2:
     st.subheader("Proyección 3D sobre centroides departamentales")
     year_3d = st.selectbox("Año", [2018, 2023], index=1, key="y3d")
 
-    df_y = df[df["year"] == year_3d].merge(gdf[["cod_dpto","lon","lat","departamento"]], on="cod_dpto")
+    df_y = df[df["year"] == year_3d].merge(gdf[["cod_dpto", "lon", "lat", "departamento"]], on="cod_dpto")
     min_v = df_y["cobertura_educativa"].min()
     df_y["size_pos"] = df_y["cobertura_educativa"] - min_v + 1.0
 
     fig = px.scatter_3d(
-        df_y, x="lon", y="lat", z="ipm",
-        color="cobertura_educativa", size="size_pos",
+        df_y,
+        x="lon", y="lat", z="ipm",
+        color="cobertura_educativa",
+        size="size_pos",
         hover_name="departamento",
         color_continuous_scale=[[0,"#ef4444"],[0.4,"#fbbf24"],[0.7,"#4ade80"],[1,"#22d3ee"]],
         size_max=28,
         title=f"TOPOGRAFÍA ESPACIAL 3D · {year_3d}  |  Altura = IPM  ·  Color = Cobertura"
     )
     fig.update_layout(
-        template="plotly_dark", height=680, paper_bgcolor="#05070f",
+        template="plotly_dark",
+        height=680,
+        paper_bgcolor="#05070f",
         scene=dict(
-            xaxis_title="Longitud", yaxis_title="Latitud", zaxis_title="IPM (%)",
+            xaxis_title="Longitud",
+            yaxis_title="Latitud",
+            zaxis_title="IPM (%)",
             bgcolor="rgb(5,7,15)",
             xaxis=dict(backgroundcolor="rgb(5,7,15)", gridcolor="#1e293b"),
             yaxis=dict(backgroundcolor="rgb(5,7,15)", gridcolor="#1e293b"),
             zaxis=dict(backgroundcolor="rgb(5,7,15)", gridcolor="#1e293b"),
             camera=dict(eye=dict(x=1.5, y=1.5, z=1.1))
         ),
-        title_font=dict(color="#4ade80"), font=dict(color="#e2e8f0")
+        title_font=dict(color="#4ade80"),
+        font=dict(color="#e2e8f0")
     )
     st.plotly_chart(fig, use_container_width=True)
 
-# ===== TAB 3 =====
+# ===================== TAB 3: Clusters LISA =====================
 with tab3:
     st.subheader("Clusters espaciales (High-High / Low-Low / Outliers)")
     c1, c2 = st.columns(2)
@@ -217,7 +240,7 @@ with tab3:
     fig.patch.set_facecolor("#05070f")
     st.pyplot(fig)
 
-# ===== TAB 4 =====
+# ===================== TAB 4: Informe Ejecutivo =====================
 with tab4:
     st.subheader("Interpretabilidad automatizada – lenguaje para tomadores de decisiones")
 
@@ -278,25 +301,3 @@ Se requiere:
 
 st.markdown("---")
 st.caption("TerritorioPulse · Datos oficiales DANE + MEN · Streamlit · PySAL · Herramienta de apoyo a la decisión territorial")
-'''
-
-# Guardar la app
-with open("territoriopulse_app.py", "w", encoding="utf-8") as f:
-    f.write(app_code)
-
-print("✅ Aplicación Streamlit creada: territoriopusle_app.py")
-
-# ---------- Lanzar Streamlit + túnel público ----------
-print("\n🚀 Lanzando Streamlit...")
-
-# Matar procesos anteriores si existen
-os.system("pkill -f streamlit")
-
-# Abrir túnel con ngrok (puerto 8501)
-public_url = ngrok.connect(8501)
-print(f"\n🌐 URL pública de la aplicación:\n{public_url}\n")
-
-# Ejecutar Streamlit en segundo plano
-!streamlit run territoriopusle_app.py --server.port 8501 --server.headless true --server.enableCORS false --server.enableXsrfProtection false &
-
-print("La aplicación está corriendo. Abre el enlace de arriba.")
