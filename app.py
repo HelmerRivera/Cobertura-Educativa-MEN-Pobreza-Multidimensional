@@ -1,5 +1,5 @@
 # =============================================================================
-# TerritorioPulse – Streamlit App
+# TerritorioPulse – Streamlit App (versión corregida)
 # Observatorio Espacial de Desarrollo Humano – Colombia
 # Cobertura Educativa (MEN) × IPM (DANE) | Datos REALES 2018-2023
 # =============================================================================
@@ -10,7 +10,6 @@ import pandas as pd
 import geopandas as gpd
 import json
 import plotly.express as px
-import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 from libpysal.weights import KNN
 from esda.moran import Moran_Local
@@ -73,7 +72,8 @@ def load_data():
         data_list.append({"cod_dpto": cod, "year": 2023,
                           "cobertura_educativa": cob_2023[i], "ipm": ipm_2023[i]})
 
-    df = pd.DataFrame(data_list).merge(gdf[["cod_dpto", "departamento"]], on="cod_dpto")
+    df = pd.DataFrame(data_list)
+    df = df.merge(gdf[["cod_dpto", "departamento"]], on="cod_dpto", how="left")
     return gdf, df
 
 @st.cache_data
@@ -113,191 +113,4 @@ def estimar_spvar(_gdf, _df):
 
 # Cargar datos
 gdf, df = load_data()
-resultados_spvar = estimar_spvar(gdf, df)
-
-# Header
-st.markdown("""
-<div style="text-align:center; padding: 8px 0 4px 0;">
-    <h1 style="color:#4ade80; margin-bottom:2px; letter-spacing:1px;">TERRITORIOPULSE</h1>
-    <h3 style="color:#86efac; font-weight:400; margin-top:0;">Observatorio Espacial de Desarrollo Humano – Colombia</h3>
-    <p style="color:#94a3b8; max-width:780px; margin:6px auto 0 auto; font-size:0.95rem;">
-        Visión nocturna · Topografía 3D · Clusters espaciales · Informe ejecutivo automático<br>
-        Datos oficiales MEN + DANE (2018-2023)
-    </p>
-</div>
-""", unsafe_allow_html=True)
-
-tab1, tab2, tab3, tab4 = st.tabs([
-    "🌃 Visión Nocturna",
-    "🛸 Topografía 3D",
-    "📡 Clusters LISA",
-    "📋 Informe Ejecutivo"
-])
-
-# ===================== TAB 1: Mapas Visión Nocturna =====================
-with tab1:
-    st.subheader("Mapas coropléticos de alto contraste (HUD táctico)")
-    c1, c2 = st.columns(2)
-    with c1:
-        year_m = st.selectbox("Año", [2018, 2023], index=1, key="ym")
-    with c2:
-        var_label = st.selectbox("Variable", ["Cobertura Educativa", "Pobreza Multidimensional (IPM)"], key="vm")
-        var_m = "cobertura_educativa" if "Cobertura" in var_label else "ipm"
-
-    df_y = df[df["year"] == year_m][["cod_dpto", var_m]].copy()
-    gdf_y = gdf[["cod_dpto", "departamento", "geometry"]].merge(df_y, on="cod_dpto", how="left")
-    gdf_y[var_m] = pd.to_numeric(gdf_y[var_m], errors="coerce").fillna(gdf_y[var_m].median())
-    gdf_y = gdf_y.reset_index(drop=True)
-
-    if var_m == "cobertura_educativa":
-        color_scale = [[0,"#0a1f0a"],[0.3,"#1a4d1a"],[0.5,"#2d7a2d"],[0.7,"#4ade80"],[1,"#a3e635"]]
-        titulo = f"COBERTURA EDUCATIVA (%) – VISIÓN NOCTURNA · {year_m}"
-    else:
-        color_scale = [[0,"#1a0a0a"],[0.25,"#4a1010"],[0.5,"#9a1f1f"],[0.75,"#ef4444"],[1,"#fbbf24"]]
-        titulo = f"POBREZA MULTIDIMENSIONAL (IPM) – VISIÓN NOCTURNA · {year_m}"
-
-    fig = px.choropleth(
-        gdf_y,
-        geojson=json.loads(gdf_y.to_json()),
-        locations=gdf_y.index,
-        color=var_m,
-        hover_name="departamento",
-        hover_data={var_m: ":.1f"},
-        color_continuous_scale=color_scale,
-        title=titulo,
-        projection="mercator"
-    )
-    fig.update_geos(fitbounds="locations", visible=False, bgcolor="#05070f")
-    fig.update_layout(
-        margin=dict(r=0, t=50, l=0, b=0),
-        height=600,
-        template="plotly_dark",
-        paper_bgcolor="#05070f",
-        font=dict(color="#e2e8f0"),
-        title_font=dict(color="#4ade80")
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-# ===================== TAB 2: Topografía 3D =====================
-with tab2:
-    st.subheader("Proyección 3D sobre centroides departamentales")
-    year_3d = st.selectbox("Año", [2018, 2023], index=1, key="y3d")
-
-    df_y = df[df["year"] == year_3d].merge(gdf[["cod_dpto", "lon", "lat", "departamento"]], on="cod_dpto")
-    min_v = df_y["cobertura_educativa"].min()
-    df_y["size_pos"] = df_y["cobertura_educativa"] - min_v + 1.0
-
-    fig = px.scatter_3d(
-        df_y,
-        x="lon", y="lat", z="ipm",
-        color="cobertura_educativa",
-        size="size_pos",
-        hover_name="departamento",
-        color_continuous_scale=[[0,"#ef4444"],[0.4,"#fbbf24"],[0.7,"#4ade80"],[1,"#22d3ee"]],
-        size_max=28,
-        title=f"TOPOGRAFÍA ESPACIAL 3D · {year_3d}  |  Altura = IPM  ·  Color = Cobertura"
-    )
-    fig.update_layout(
-        template="plotly_dark",
-        height=680,
-        paper_bgcolor="#05070f",
-        scene=dict(
-            xaxis_title="Longitud",
-            yaxis_title="Latitud",
-            zaxis_title="IPM (%)",
-            bgcolor="rgb(5,7,15)",
-            xaxis=dict(backgroundcolor="rgb(5,7,15)", gridcolor="#1e293b"),
-            yaxis=dict(backgroundcolor="rgb(5,7,15)", gridcolor="#1e293b"),
-            zaxis=dict(backgroundcolor="rgb(5,7,15)", gridcolor="#1e293b"),
-            camera=dict(eye=dict(x=1.5, y=1.5, z=1.1))
-        ),
-        title_font=dict(color="#4ade80"),
-        font=dict(color="#e2e8f0")
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-# ===================== TAB 3: Clusters LISA =====================
-with tab3:
-    st.subheader("Clusters espaciales (High-High / Low-Low / Outliers)")
-    c1, c2 = st.columns(2)
-    with c1:
-        year_l = st.selectbox("Año", [2018, 2023], index=1, key="yl")
-    with c2:
-        var_label = st.selectbox("Variable", ["Cobertura Educativa", "Pobreza Multidimensional (IPM)"], key="vl")
-        var_l = "cobertura_educativa" if "Cobertura" in var_label else "ipm"
-
-    df_y = df[df["year"] == year_l].set_index("cod_dpto").reindex(gdf["cod_dpto"])
-    y = df_y[var_l].values
-    w = KNN.from_dataframe(gdf, k=4, ids=gdf["cod_dpto"].tolist())
-    w.transform = "r"
-    lisa = Moran_Local(y, w)
-
-    fig, ax = plt.subplots(figsize=(9, 8), facecolor="#05070f")
-    lisa_cluster(lisa, gdf, p=0.05, ax=ax, legend=True)
-    ax.set_title(f"CLUSTERS LISA · {var_l.replace('_',' ').upper()} ({year_l})",
-                 color="#4ade80", fontsize=14, pad=12)
-    ax.set_axis_off()
-    fig.patch.set_facecolor("#05070f")
-    st.pyplot(fig)
-
-# ===================== TAB 4: Informe Ejecutivo =====================
-with tab4:
-    st.subheader("Interpretabilidad automatizada – lenguaje para tomadores de decisiones")
-
-    c_cob = resultados_spvar["Cobertura_Educativa"]["coefs"]
-    c_ipm = resultados_spvar["IPM"]["coefs"]
-    r2_cob = resultados_spvar["Cobertura_Educativa"]["rsquared"]
-    r2_ipm = resultados_spvar["IPM"]["rsquared"]
-
-    st.markdown(f"""
-### 📋 INFORME EJECUTIVO AUTOMÁTICO – TerritorioPulse
-
-**Periodo:** 2018 → 2023 · **Unidades:** 33 departamentos · **Fuentes:** MEN + DANE
-
----
-
-#### 1. Persistencia territorial (Autodinámica)
-
-- **Cobertura Educativa** → φ = `{c_cob['auto']:.3f}`  
-  Alta inercia. Los departamentos con mejor cobertura en 2018 mantienen esa ventaja.  
-  Mejorar la educación requiere esfuerzos **sostenidos en el tiempo**.
-
-- **IPM** → φ = `{c_ipm['auto']:.3f}`  
-  La pobreza multidimensional es altamente persistente. No se reduce de un año a otro de forma automática.
-
-#### 2. Cruce local (efecto dentro del mismo departamento)
-
-- Efecto de la pobreza sobre la cobertura educativa: β = `{c_cob['cruce_local']:.3f}`  
-  Relación débil-negativa. Mayor pobreza se asocia ligeramente con menor cobertura.
-
-- Efecto de la cobertura sobre el IPM: β = `{c_ipm['cruce_local']:.3f}`  
-  Las mejoras educativas no se traducen inmediatamente en reducción de pobreza multidimensional.
-
-#### 3. Spillovers espaciales (efecto de los vecinos)
-
-- Spillover directo de cobertura (ρ = `{c_cob['espacial_directa']:.3f}`):  
-  Existe transmisión positiva moderada. Mejorar la educación en un departamento genera **externalidades positivas** en los vecinos.
-
-- Spillovers cruzados (θ cobertura = `{c_cob['espacial_cruzada']:.3f}` | θ IPM = `{c_ipm['espacial_cruzada']:.3f}`):  
-  Las condiciones de los departamentos vecinos influyen en el departamento focal.  
-  Confirma que las políticas **no pueden diseñarse de forma aislada**.
-
-#### 4. Calidad del ajuste
-
-- R² Cobertura Educativa = `{r2_cob:.3f}`  
-- R² IPM = `{r2_ipm:.3f}`
-
-#### 5. Recomendación de política pública
-
-Los resultados del SpVAR demuestran que **las intervenciones departamentales aisladas son insuficientes**.
-
-Se requiere:
-1. Coordinación interdepartamental (especialmente entre vecinos geográficos).  
-2. Políticas de mediano y largo plazo que reconozcan la alta persistencia.  
-3. Estrategias territoriales integradas que ataquen simultáneamente educación y pobreza multidimensional.
-
-**Recomendación central:** priorizar **corredores regionales** de educación y superación de pobreza en lugar de acciones fragmentadas por departamento.
-""")
-
-st.markdown("---")
-st.caption("TerritorioPulse · Datos oficiales DANE + MEN · Streamlit · PySAL · Herramienta de apoyo a la decisión territorial")
+resultados_spvar = 
